@@ -1,0 +1,834 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "languageVersion": "2.0",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.49.2.45890",
+      "templateHash": "11407593716011373593"
+    }
+  },
+  "functions": [
+    {
+      "namespace": "__bicep",
+      "members": {
+        "grantCondition": {
+          "parameters": [
+            {
+              "type": "array",
+              "name": "roleIds"
+            }
+          ],
+          "output": {
+            "type": "string",
+            "value": "[format('((!(ActionMatches{{''Microsoft.Authorization/roleAssignments/write''}})) OR (@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {{{0}}})) AND ((!(ActionMatches{{''Microsoft.Authorization/roleAssignments/delete''}})) OR (@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {{{1}}}))', join(parameters('roleIds'), ', '), join(parameters('roleIds'), ', '))]"
+          }
+        }
+      }
+    }
+  ],
+  "parameters": {
+    "principalId": {
+      "type": "string",
+      "metadata": {
+        "description": "Object ID of the CoPlane service principal (enterprise application) in your tenant. This is not the application (client) ID."
+      }
+    },
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "coplane",
+      "minLength": 3,
+      "maxLength": 32,
+      "metadata": {
+        "description": "Prefix of the platform's resource group and identity names. CoPlane's Terraform finds them by it."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[deployment().location]",
+      "metadata": {
+        "description": "Region of the platform's resource groups and identities, and of its cluster."
+      }
+    }
+  },
+  "variables": {
+    "roles": {
+      "contributor": "b24988ac-6180-42a0-ab88-20f7382dd24c",
+      "rbacAdministrator": "f58310d9-a9f6-439a-9e8d-f62e7b41a168",
+      "aksRbacClusterAdmin": "b1ff04bb-8a4e-4dc4-8eb5-8693973ce19b",
+      "networkContributor": "4d97b98b-1d4f-4787-a291-c67834d212e7",
+      "reader": "acdd72a7-3385-48ef-bd42-f606fba81ae7",
+      "dnsZoneContributor": "befefa01-2a29-4197-83a8-272ff33ce314",
+      "albConfigurationManager": "fbc52c3f-28ad-4303-a892-8a056630b8f1",
+      "storageBlobDataContributor": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
+      "keyVaultSecretsUser": "4633458b-17de-408a-b874-0445c86b69e6",
+      "keyVaultSecretsOfficer": "b86a8fe4-44ce-4948-aee5-eccb2c155cd7",
+      "openAiUser": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+      "acrPull": "7f951dda-4ed3-4680-a7ca-43fe172d538d",
+      "acrPush": "8311e382-0749-4cb8-b61a-304f252e45ec"
+    },
+    "coplaneGrantableRoleIds": [
+      "[variables('roles').acrPull]",
+      "[variables('roles').aksRbacClusterAdmin]"
+    ],
+    "appDataRoleIds": [
+      "[variables('roles').storageBlobDataContributor]",
+      "[variables('roles').keyVaultSecretsUser]",
+      "[variables('roles').keyVaultSecretsOfficer]"
+    ],
+    "identityNames": {
+      "cluster": "[format('{0}-cluster', parameters('namePrefix'))]",
+      "ingress": "[format('{0}-alb', parameters('namePrefix'))]",
+      "certificates": "[format('{0}-cert-manager', parameters('namePrefix'))]",
+      "operator": "[format('{0}-aso', parameters('namePrefix'))]",
+      "appPush": "[format('{0}-app-push', parameters('namePrefix'))]",
+      "bundlePush": "[format('{0}-bundle-push', parameters('namePrefix'))]"
+    }
+  },
+  "resources": {
+    "contributor": {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(subscription().id, parameters('principalId'), variables('roles').contributor)]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').contributor)]",
+        "principalId": "[parameters('principalId')]",
+        "principalType": "ServicePrincipal",
+        "description": "CoPlane: create and manage platform resources"
+      }
+    },
+    "rbacAdministrator": {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(subscription().id, parameters('principalId'), variables('roles').rbacAdministrator)]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').rbacAdministrator)]",
+        "principalId": "[parameters('principalId')]",
+        "principalType": "ServicePrincipal",
+        "description": "CoPlane: grant registry pull and cluster admin to the platform and its engineers",
+        "conditionVersion": "2.0",
+        "condition": "[__bicep.grantCondition(variables('coplaneGrantableRoleIds'))]"
+      }
+    },
+    "aksRbacClusterAdmin": {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(subscription().id, parameters('principalId'), variables('roles').aksRbacClusterAdmin)]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').aksRbacClusterAdmin)]",
+        "principalId": "[parameters('principalId')]",
+        "principalType": "ServicePrincipal",
+        "description": "CoPlane: operate the platform Kubernetes clusters"
+      }
+    },
+    "platformGroup": {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2024-03-01",
+      "name": "[format('rg-{0}', parameters('namePrefix'))]",
+      "location": "[parameters('location')]"
+    },
+    "networkGroup": {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2024-03-01",
+      "name": "[format('rg-{0}-network', parameters('namePrefix'))]",
+      "location": "[parameters('location')]"
+    },
+    "deliveryGroup": {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2024-03-01",
+      "name": "[format('rg-{0}-delivery', parameters('namePrefix'))]",
+      "location": "[parameters('location')]"
+    },
+    "appsGroup": {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2024-03-01",
+      "name": "[format('rg-{0}-apps', parameters('namePrefix'))]",
+      "location": "[parameters('location')]"
+    },
+    "identities": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "coplane-identities",
+      "resourceGroup": "[format('rg-{0}', parameters('namePrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "names": {
+            "value": "[variables('identityNames')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.49.2.45890",
+              "templateHash": "9769522901137901282"
+            }
+          },
+          "parameters": {
+            "names": {
+              "type": "object",
+              "properties": {
+                "cluster": {
+                  "type": "string"
+                },
+                "ingress": {
+                  "type": "string"
+                },
+                "certificates": {
+                  "type": "string"
+                },
+                "operator": {
+                  "type": "string"
+                },
+                "appPush": {
+                  "type": "string"
+                },
+                "bundlePush": {
+                  "type": "string"
+                }
+              }
+            },
+            "location": {
+              "type": "string"
+            }
+          },
+          "resources": {
+            "cluster": {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('names').cluster]",
+              "location": "[parameters('location')]"
+            },
+            "ingress": {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('names').ingress]",
+              "location": "[parameters('location')]"
+            },
+            "certificates": {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('names').certificates]",
+              "location": "[parameters('location')]"
+            },
+            "operator": {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('names').operator]",
+              "location": "[parameters('location')]"
+            },
+            "appPush": {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('names').appPush]",
+              "location": "[parameters('location')]"
+            },
+            "bundlePush": {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('names').bundlePush]",
+              "location": "[parameters('location')]"
+            }
+          },
+          "outputs": {
+            "principalIds": {
+              "type": "object",
+              "value": {
+                "cluster": "[reference('cluster').principalId]",
+                "ingress": "[reference('ingress').principalId]",
+                "certificates": "[reference('certificates').principalId]",
+                "operator": "[reference('operator').principalId]",
+                "appPush": "[reference('appPush').principalId]",
+                "bundlePush": "[reference('bundlePush').principalId]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "platformGroup"
+      ]
+    },
+    "state": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "coplane-state",
+      "resourceGroup": "[format('rg-{0}', parameters('namePrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[take(format('tfstate{0}', uniqueString(subscription().id, parameters('namePrefix'))), 24)]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "coplanePrincipalId": {
+            "value": "[parameters('principalId')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.49.2.45890",
+              "templateHash": "1269594580414609373"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "coplanePrincipalId": {
+              "type": "string"
+            }
+          },
+          "variables": {
+            "storageBlobDataContributor": "ba92f5b4-2d11-453d-a403-e96b0029c9fe"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-05-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "kind": "StorageV2",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "properties": {
+                "allowSharedKeyAccess": false,
+                "allowBlobPublicAccess": false,
+                "defaultToOAuthAuthentication": true,
+                "minimumTlsVersion": "TLS1_2",
+                "supportsHttpsTrafficOnly": true
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'default')]",
+              "properties": {
+                "isVersioningEnabled": true,
+                "deleteRetentionPolicy": {
+                  "enabled": true,
+                  "days": 30
+                },
+                "containerDeleteRetentionPolicy": {
+                  "enabled": true,
+                  "days": 30
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}/{2}', parameters('name'), 'default', 'tfstate')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('name'), 'default')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('name')), parameters('coplanePrincipalId'), variables('storageBlobDataContributor'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataContributor'))]",
+                "principalId": "[parameters('coplanePrincipalId')]",
+                "principalType": "ServicePrincipal",
+                "description": "CoPlane: read and write the platform's Terraform state"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/locks",
+              "apiVersion": "2020-05-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]",
+              "name": "keep-platform-state",
+              "properties": {
+                "level": "CanNotDelete",
+                "notes": "The CoPlane platform's Terraform state. Remove only when removing the platform."
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "platformGroup"
+      ]
+    },
+    "appsGrants": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "coplane-apps-grants",
+      "resourceGroup": "[format('rg-{0}-apps', parameters('namePrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "assignments": {
+            "value": [
+              {
+                "principalId": "[reference('identities').outputs.principalIds.value.operator]",
+                "identity": "[variables('identityNames').operator]",
+                "roleId": "[variables('roles').contributor]",
+                "description": "CoPlane platform: Azure Service Operator manages app resources"
+              },
+              {
+                "principalId": "[reference('identities').outputs.principalIds.value.operator]",
+                "identity": "[variables('identityNames').operator]",
+                "roleId": "[variables('roles').rbacAdministrator]",
+                "description": "CoPlane platform: Azure Service Operator gives app identities access to their own data",
+                "condition": "[__bicep.grantCondition(variables('appDataRoleIds'))]"
+              }
+            ]
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.49.2.45890",
+              "templateHash": "16281406561472080558"
+            }
+          },
+          "definitions": {
+            "assignment": {
+              "type": "object",
+              "properties": {
+                "principalId": {
+                  "type": "string"
+                },
+                "identity": {
+                  "type": "string",
+                  "metadata": {
+                    "description": "The identity's name, known before deployment, so what-if can show each assignment."
+                  }
+                },
+                "roleId": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "condition": {
+                  "type": "string",
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "parameters": {
+            "assignments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/assignment"
+              }
+            }
+          },
+          "resources": {
+            "roleAssignment": {
+              "copy": {
+                "name": "roleAssignment",
+                "count": "[length(parameters('assignments'))]"
+              },
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('assignments')[copyIndex()].identity, parameters('assignments')[copyIndex()].roleId)]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', parameters('assignments')[copyIndex()].roleId)]",
+                "principalId": "[parameters('assignments')[copyIndex()].principalId]",
+                "principalType": "ServicePrincipal",
+                "description": "[parameters('assignments')[copyIndex()].description]",
+                "conditionVersion": "[if(equals(tryGet(parameters('assignments')[copyIndex()], 'condition'), null()), null(), '2.0')]",
+                "condition": "[tryGet(parameters('assignments')[copyIndex()], 'condition')]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "appsGroup",
+        "identities"
+      ]
+    },
+    "networkGrants": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "coplane-network-grants",
+      "resourceGroup": "[format('rg-{0}-network', parameters('namePrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "assignments": {
+            "value": [
+              {
+                "principalId": "[reference('identities').outputs.principalIds.value.cluster]",
+                "identity": "[variables('identityNames').cluster]",
+                "roleId": "[variables('roles').networkContributor]",
+                "description": "CoPlane platform: the Kubernetes cluster places nodes in its subnet"
+              },
+              {
+                "principalId": "[reference('identities').outputs.principalIds.value.ingress]",
+                "identity": "[variables('identityNames').ingress]",
+                "roleId": "[variables('roles').networkContributor]",
+                "description": "CoPlane platform: the ingress controller joins the gateway to its subnet"
+              },
+              {
+                "principalId": "[reference('identities').outputs.principalIds.value.operator]",
+                "identity": "[variables('identityNames').operator]",
+                "roleId": "[variables('roles').networkContributor]",
+                "description": "CoPlane platform: Azure Service Operator joins app databases to their subnet and private DNS zone"
+              }
+            ]
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.49.2.45890",
+              "templateHash": "16281406561472080558"
+            }
+          },
+          "definitions": {
+            "assignment": {
+              "type": "object",
+              "properties": {
+                "principalId": {
+                  "type": "string"
+                },
+                "identity": {
+                  "type": "string",
+                  "metadata": {
+                    "description": "The identity's name, known before deployment, so what-if can show each assignment."
+                  }
+                },
+                "roleId": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "condition": {
+                  "type": "string",
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "parameters": {
+            "assignments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/assignment"
+              }
+            }
+          },
+          "resources": {
+            "roleAssignment": {
+              "copy": {
+                "name": "roleAssignment",
+                "count": "[length(parameters('assignments'))]"
+              },
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('assignments')[copyIndex()].identity, parameters('assignments')[copyIndex()].roleId)]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', parameters('assignments')[copyIndex()].roleId)]",
+                "principalId": "[parameters('assignments')[copyIndex()].principalId]",
+                "principalType": "ServicePrincipal",
+                "description": "[parameters('assignments')[copyIndex()].description]",
+                "conditionVersion": "[if(equals(tryGet(parameters('assignments')[copyIndex()], 'condition'), null()), null(), '2.0')]",
+                "condition": "[tryGet(parameters('assignments')[copyIndex()], 'condition')]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "identities",
+        "networkGroup"
+      ]
+    },
+    "platformGrants": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "coplane-platform-grants",
+      "resourceGroup": "[format('rg-{0}', parameters('namePrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "assignments": {
+            "value": [
+              {
+                "principalId": "[reference('identities').outputs.principalIds.value.ingress]",
+                "identity": "[variables('identityNames').ingress]",
+                "roleId": "[variables('roles').albConfigurationManager]",
+                "description": "CoPlane platform: the ingress controller configures the shared gateway"
+              },
+              {
+                "principalId": "[reference('identities').outputs.principalIds.value.ingress]",
+                "identity": "[variables('identityNames').ingress]",
+                "roleId": "[variables('roles').reader]",
+                "description": "CoPlane platform: the ingress controller reads the gateway and its firewall policy"
+              },
+              {
+                "principalId": "[reference('identities').outputs.principalIds.value.certificates]",
+                "identity": "[variables('identityNames').certificates]",
+                "roleId": "[variables('roles').dnsZoneContributor]",
+                "description": "CoPlane platform: cert-manager proves ownership of the app domain"
+              },
+              {
+                "principalId": "[reference('identities').outputs.principalIds.value.operator]",
+                "identity": "[variables('identityNames').operator]",
+                "roleId": "[variables('roles').rbacAdministrator]",
+                "description": "CoPlane platform: Azure Service Operator lets app identities call the platform model",
+                "condition": "[__bicep.grantCondition(createArray(variables('roles').openAiUser))]"
+              },
+              {
+                "principalId": "[reference('identities').outputs.principalIds.value.appPush]",
+                "identity": "[variables('identityNames').appPush]",
+                "roleId": "[variables('roles').acrPush]",
+                "description": "CoPlane platform: app builds push images and move release tags in the app registry"
+              }
+            ]
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.49.2.45890",
+              "templateHash": "16281406561472080558"
+            }
+          },
+          "definitions": {
+            "assignment": {
+              "type": "object",
+              "properties": {
+                "principalId": {
+                  "type": "string"
+                },
+                "identity": {
+                  "type": "string",
+                  "metadata": {
+                    "description": "The identity's name, known before deployment, so what-if can show each assignment."
+                  }
+                },
+                "roleId": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "condition": {
+                  "type": "string",
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "parameters": {
+            "assignments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/assignment"
+              }
+            }
+          },
+          "resources": {
+            "roleAssignment": {
+              "copy": {
+                "name": "roleAssignment",
+                "count": "[length(parameters('assignments'))]"
+              },
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('assignments')[copyIndex()].identity, parameters('assignments')[copyIndex()].roleId)]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', parameters('assignments')[copyIndex()].roleId)]",
+                "principalId": "[parameters('assignments')[copyIndex()].principalId]",
+                "principalType": "ServicePrincipal",
+                "description": "[parameters('assignments')[copyIndex()].description]",
+                "conditionVersion": "[if(equals(tryGet(parameters('assignments')[copyIndex()], 'condition'), null()), null(), '2.0')]",
+                "condition": "[tryGet(parameters('assignments')[copyIndex()], 'condition')]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "identities",
+        "platformGroup"
+      ]
+    },
+    "deliveryGrants": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "coplane-delivery-grants",
+      "resourceGroup": "[format('rg-{0}-delivery', parameters('namePrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "assignments": {
+            "value": [
+              {
+                "principalId": "[reference('identities').outputs.principalIds.value.bundlePush]",
+                "identity": "[variables('identityNames').bundlePush]",
+                "roleId": "[variables('roles').acrPush]",
+                "description": "CoPlane platform: CoPlane publishes the platform configuration to its registry"
+              }
+            ]
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.49.2.45890",
+              "templateHash": "16281406561472080558"
+            }
+          },
+          "definitions": {
+            "assignment": {
+              "type": "object",
+              "properties": {
+                "principalId": {
+                  "type": "string"
+                },
+                "identity": {
+                  "type": "string",
+                  "metadata": {
+                    "description": "The identity's name, known before deployment, so what-if can show each assignment."
+                  }
+                },
+                "roleId": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "condition": {
+                  "type": "string",
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "parameters": {
+            "assignments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/assignment"
+              }
+            }
+          },
+          "resources": {
+            "roleAssignment": {
+              "copy": {
+                "name": "roleAssignment",
+                "count": "[length(parameters('assignments'))]"
+              },
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('assignments')[copyIndex()].identity, parameters('assignments')[copyIndex()].roleId)]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', parameters('assignments')[copyIndex()].roleId)]",
+                "principalId": "[parameters('assignments')[copyIndex()].principalId]",
+                "principalType": "ServicePrincipal",
+                "description": "[parameters('assignments')[copyIndex()].description]",
+                "conditionVersion": "[if(equals(tryGet(parameters('assignments')[copyIndex()], 'condition'), null()), null(), '2.0')]",
+                "condition": "[tryGet(parameters('assignments')[copyIndex()], 'condition')]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "deliveryGroup",
+        "identities"
+      ]
+    }
+  },
+  "outputs": {
+    "roleAssignmentIds": {
+      "type": "array",
+      "value": [
+        "[subscriptionResourceId('Microsoft.Authorization/roleAssignments', guid(subscription().id, parameters('principalId'), variables('roles').contributor))]",
+        "[subscriptionResourceId('Microsoft.Authorization/roleAssignments', guid(subscription().id, parameters('principalId'), variables('roles').rbacAdministrator))]",
+        "[subscriptionResourceId('Microsoft.Authorization/roleAssignments', guid(subscription().id, parameters('principalId'), variables('roles').aksRbacClusterAdmin))]"
+      ]
+    },
+    "resourceGroups": {
+      "type": "object",
+      "value": {
+        "platform": "[format('rg-{0}', parameters('namePrefix'))]",
+        "network": "[format('rg-{0}-network', parameters('namePrefix'))]",
+        "delivery": "[format('rg-{0}-delivery', parameters('namePrefix'))]",
+        "apps": "[format('rg-{0}-apps', parameters('namePrefix'))]"
+      }
+    },
+    "stateStorageAccount": {
+      "type": "string",
+      "value": "[reference('state').outputs.name.value]"
+    }
+  }
+}

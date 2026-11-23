@@ -1,0 +1,180 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2021-09-09/uiFormDefinition.schema.json#",
+  "view": {
+    "kind": "Form",
+    "properties": {
+      "title": "Connect CoPlane to your Azure subscription",
+      "steps": [
+        {
+          "name": "basics",
+          "label": "Subscription",
+          "elements": [
+            {
+              "name": "resourceScope",
+              "type": "Microsoft.Common.ResourceScope",
+              "instanceDetailsLabel": "Deployment details",
+              "location": {
+                "label": "Region",
+                "toolTip": "Where the platform runs. The resource groups, identities and later the cluster are created in this region."
+              }
+            },
+            {
+              "name": "intro",
+              "type": "Microsoft.Common.TextBlock",
+              "options": {
+                "text": "CoPlane runs its app platform inside this subscription. This deployment gives CoPlane's service principal three role assignments on the subscription. It also creates a storage account for CoPlane's Terraform state, which CoPlane can read and write, and the platform's four resource groups and six managed identities, and gives those identities the roles they need, because CoPlane isn't allowed to grant those roles itself. You need to be an Owner of the subscription. You can remove CoPlane's access at any time by deleting its role assignments."
+              }
+            },
+            {
+              "name": "namePrefix",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Name prefix",
+              "defaultValue": "coplane",
+              "toolTip": "Starts the names of the platform's resource groups (rg-<prefix>, rg-<prefix>-network, rg-<prefix>-apps) and identities. Keep the default unless CoPlane gives you another.",
+              "constraints": {
+                "required": true,
+                "regex": "^[a-z][a-z0-9-]{1,30}[a-z0-9]$",
+                "validationMessage": "3 to 32 lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen."
+              }
+            },
+            {
+              "name": "coplaneServicePrincipal",
+              "type": "Microsoft.Solutions.GraphApiControl",
+              "request": {
+                "method": "GET",
+                "path": "/v1.0/servicePrincipals?$filter=appId eq '58dc25ab-89f7-44bc-8c3f-35817e38b787'&$select=id,appId,displayName"
+              }
+            },
+            {
+              "name": "found",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": "[not(empty(steps('basics').coplaneServicePrincipal.value))]",
+              "options": {
+                "style": "Info",
+                "text": "[concat('Found CoPlane in your directory: ', first(map(steps('basics').coplaneServicePrincipal.value, (sp) => sp.displayName)), ' (object ID ', first(map(steps('basics').coplaneServicePrincipal.value, (sp) => sp.id)), ').')]"
+              }
+            },
+            {
+              "name": "notFound",
+              "type": "Microsoft.Common.InfoBox",
+              "visible": "[empty(steps('basics').coplaneServicePrincipal.value)]",
+              "options": {
+                "style": "Warning",
+                "text": "CoPlane isn't in your directory yet. A Microsoft Entra administrator must approve CoPlane first using the consent link CoPlane sent you, then reload this page. If you have the object ID of CoPlane's enterprise application from your administrator, you can enter it below instead.",
+                "uri": {
+                  "value": "https://login.microsoftonline.com/organizations/v2.0/adminconsent?client_id=58dc25ab-89f7-44bc-8c3f-35817e38b787&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default&redirect_uri=https%3A%2F%2Fcoplane.com%2Fazure%2Fconnected",
+                  "text": "Open the administrator consent page"
+                }
+              }
+            },
+            {
+              "name": "manualPrincipalId",
+              "type": "Microsoft.Common.TextBox",
+              "label": "CoPlane enterprise application object ID",
+              "toolTip": "In Microsoft Entra ID, open Enterprise applications, select CoPlane and copy its Object ID. This is not the Application (client) ID.",
+              "visible": "[empty(steps('basics').coplaneServicePrincipal.value)]",
+              "constraints": {
+                "required": true,
+                "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                "validationMessage": "Enter the object ID as a GUID, for example 11111111-2222-3333-4444-555555555555."
+              }
+            }
+          ]
+        },
+        {
+          "name": "access",
+          "label": "Access granted",
+          "elements": [
+            {
+              "name": "summary",
+              "type": "Microsoft.Common.TextBlock",
+              "options": {
+                "text": "CoPlane's service principal gets these three roles on the whole subscription, and read and write access to the Terraform state account."
+              }
+            },
+            {
+              "name": "contributor",
+              "type": "Microsoft.Common.Section",
+              "label": "Contributor",
+              "elements": [
+                {
+                  "name": "text",
+                  "type": "Microsoft.Common.TextBlock",
+                  "options": {
+                    "text": "Create and update the platform's resources, such as Kubernetes clusters, networks, databases, storage, key vaults and container registries. Contributor can't create role assignments. It does cover the apps' resource group, and it lets CoPlane manage the platform identities below, including how they sign in, so CoPlane can act as them. As the platform's operator, CoPlane can therefore reach your apps' data. Its actions appear in the subscription's activity log, and removing CoPlane's role assignments ends all of its access."
+                  }
+                }
+              ]
+            },
+            {
+              "name": "rbacAdministrator",
+              "type": "Microsoft.Common.Section",
+              "label": "Role Based Access Control Administrator (restricted)",
+              "elements": [
+                {
+                  "name": "text",
+                  "type": "Microsoft.Common.TextBlock",
+                  "options": {
+                    "text": "Let the platform's cluster and Argo CD pull from its container registry, and give named CoPlane engineers admin access to the platform's Kubernetes clusters. A condition on this assignment limits it to two roles: AcrPull and Azure Kubernetes Service RBAC Cluster Admin. CoPlane can't grant or remove any other role, so it can never make anyone an Owner, User Access Administrator or Role Based Access Control Administrator."
+                  }
+                }
+              ]
+            },
+            {
+              "name": "aksRbacClusterAdmin",
+              "type": "Microsoft.Common.Section",
+              "label": "Azure Kubernetes Service RBAC Cluster Admin",
+              "elements": [
+                {
+                  "name": "text",
+                  "type": "Microsoft.Common.TextBlock",
+                  "options": {
+                    "text": "Install and upgrade the platform's components inside its Kubernetes clusters, and investigate incidents. App deploys don't use it. It applies only inside AKS clusters that use Azure RBAC and gives no access to other Azure resources."
+                  }
+                }
+              ]
+            },
+            {
+              "name": "platform",
+              "type": "Microsoft.Common.Section",
+              "label": "Platform resource groups and identities",
+              "elements": [
+                {
+                  "name": "text",
+                  "type": "Microsoft.Common.TextBlock",
+                  "options": {
+                    "text": "The deployment creates four resource groups: rg-<prefix> for the platform and its app image registry, rg-<prefix>-network for its network, rg-<prefix>-delivery for the registry of the platform's configuration, and rg-<prefix>-apps for the apps' databases, storage and key vaults. It creates six managed identities in rg-<prefix>, four used by the platform's components inside its cluster and two that push to the platform's container registry, and gives each only what it needs: the cluster and the ingress controller get Network Contributor on rg-<prefix>-network; the ingress controller gets AppGw for Containers Configuration Manager and Reader on rg-<prefix>; cert-manager gets DNS Zone Contributor on rg-<prefix>, to prove ownership of the app domain; Azure Service Operator gets Contributor on rg-<prefix>-apps, Network Contributor on rg-<prefix>-network, and Role Based Access Control Administrator restricted to Storage Blob Data Contributor, Key Vault Secrets User and Key Vault Secrets Officer on rg-<prefix>-apps and to Cognitive Services OpenAI User on rg-<prefix>; the app push identity gets AcrPush on rg-<prefix>, for app images, and the bundle push identity gets AcrPush on rg-<prefix>-delivery, for the platform's configuration, so app builds can't change the platform's configuration. CoPlane's own service principal can't grant any of these roles."
+                  }
+                }
+              ]
+            },
+            {
+              "name": "state",
+              "type": "Microsoft.Common.Section",
+              "label": "Terraform state",
+              "elements": [
+                {
+                  "name": "text",
+                  "type": "Microsoft.Common.TextBlock",
+                  "options": {
+                    "text": "The deployment creates a storage account in rg-<prefix>, tfstate<suffix>, where CoPlane's Terraform keeps its record of what it built, and gives CoPlane's service principal Storage Blob Data Contributor on that account only. The account accepts Entra ID sign-in only, keeps every version and deleted data for 30 days, and has a delete lock that CoPlane can't remove."
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "outputs": {
+      "kind": "Subscription",
+      "subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]",
+      "location": "[steps('basics').resourceScope.location.name]",
+      "parameters": {
+        "principalId": "[if(empty(steps('basics').coplaneServicePrincipal.value), steps('basics').manualPrincipalId, first(map(steps('basics').coplaneServicePrincipal.value, (sp) => sp.id)))]",
+        "namePrefix": "[steps('basics').namePrefix]",
+        "location": "[steps('basics').resourceScope.location.name]"
+      }
+    }
+  }
+}
