@@ -38,29 +38,11 @@
               }
             },
             {
-              "name": "coplaneServicePrincipal",
-              "type": "Microsoft.Solutions.GraphApiControl",
-              "request": {
-                "method": "GET",
-                "path": "/v1.0/servicePrincipals?$filter=appId eq '58dc25ab-89f7-44bc-8c3f-35817e38b787'&$select=id,appId,displayName"
-              }
-            },
-            {
-              "name": "found",
+              "name": "principalHelp",
               "type": "Microsoft.Common.InfoBox",
-              "visible": "[not(empty(steps('basics').coplaneServicePrincipal.value))]",
               "options": {
                 "style": "Info",
-                "text": "[concat('Found CoPlane in your directory: ', first(map(steps('basics').coplaneServicePrincipal.value, (sp) => sp.displayName)), ' (object ID ', first(map(steps('basics').coplaneServicePrincipal.value, (sp) => sp.id)), ').')]"
-              }
-            },
-            {
-              "name": "notFound",
-              "type": "Microsoft.Common.InfoBox",
-              "visible": "[empty(steps('basics').coplaneServicePrincipal.value)]",
-              "options": {
-                "style": "Warning",
-                "text": "CoPlane isn't in your directory yet. A Microsoft Entra administrator must approve CoPlane first using the consent link CoPlane sent you, then reload this page. If you have the object ID of CoPlane's enterprise application from your administrator, you can enter it below instead.",
+                "text": "A Microsoft Entra administrator must approve CoPlane first with the consent link CoPlane sent you. The approval adds CoPlane under Enterprise applications in your tenant. Open Microsoft Entra ID, then Enterprise applications, select CoPlane, and copy its Object ID. With the Azure CLI: az ad sp show --id 58dc25ab-89f7-44bc-8c3f-35817e38b787 --query id -o tsv",
                 "uri": {
                   "value": "https://login.microsoftonline.com/organizations/v2.0/adminconsent?client_id=58dc25ab-89f7-44bc-8c3f-35817e38b787&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default&redirect_uri=https%3A%2F%2Fcoplane.com%2Fazure%2Fconnected",
                   "text": "Open the administrator consent page"
@@ -68,15 +50,22 @@
               }
             },
             {
-              "name": "manualPrincipalId",
+              "name": "principalId",
               "type": "Microsoft.Common.TextBox",
               "label": "CoPlane enterprise application object ID",
-              "toolTip": "In Microsoft Entra ID, open Enterprise applications, select CoPlane and copy its Object ID. This is not the Application (client) ID.",
-              "visible": "[empty(steps('basics').coplaneServicePrincipal.value)]",
+              "toolTip": "The Object ID of CoPlane under Enterprise applications in your tenant. This is not the Application (client) ID, 58dc25ab-89f7-44bc-8c3f-35817e38b787.",
               "constraints": {
                 "required": true,
-                "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
-                "validationMessage": "Enter the object ID as a GUID, for example 11111111-2222-3333-4444-555555555555."
+                "validations": [
+                  {
+                    "regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                    "message": "Enter the object ID as a GUID, for example 11111111-2222-3333-4444-555555555555."
+                  },
+                  {
+                    "isValid": "[not(equals(toLower(steps('basics').principalId), '58dc25ab-89f7-44bc-8c3f-35817e38b787'))]",
+                    "message": "This is CoPlane's Application (client) ID. Enter the Object ID of CoPlane under Enterprise applications instead."
+                  }
+                ]
               }
             }
           ]
@@ -168,10 +157,10 @@
     },
     "outputs": {
       "kind": "Subscription",
-      "subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]",
+      "subscriptionId": "[concat('/subscriptions/', steps('basics').resourceScope.subscription.subscriptionId)]",
       "location": "[steps('basics').resourceScope.location.name]",
       "parameters": {
-        "principalId": "[if(empty(steps('basics').coplaneServicePrincipal.value), steps('basics').manualPrincipalId, first(map(steps('basics').coplaneServicePrincipal.value, (sp) => sp.id)))]",
+        "principalId": "[steps('basics').principalId]",
         "namePrefix": "[steps('basics').namePrefix]",
         "location": "[steps('basics').resourceScope.location.name]"
       }
